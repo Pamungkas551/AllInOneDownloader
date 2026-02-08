@@ -1,115 +1,91 @@
 const axios = require('axios');
 const cheerio = require('cheerio');
 
-// Konfigurasi Header agar menyerupai browser asli
-const headers = {
+// Header global untuk menghindari deteksi bot
+const globalHeaders = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
-    'Accept': 'application/json, text/plain, */*',
-    'Origin': 'https://google.com',
-    'Referer': 'https://google.com'
+    'Accept': 'application/json, text/plain, */*'
 };
 
-/**
- * 1. TIKTOK SCRAPER (TikWm)
- */
-async function tiktokScraper(url) {
-    const { data } = await axios.post('https://www.tikwm.com/api/', new URLSearchParams({ url, web: 1 }), { headers });
-    if (!data.data) throw new Error("TikTok data not found");
-    return { title: data.data.title, url: data.data.play };
-}
+// --- PLATFORM SCRAPERS ---
 
-/**
- * 2. SPOTIFY SCRAPER (Spotmate)
- */
-async function spotifyScraper(url) {
-    const rynn = await axios.get('https://spotmate.online/', { headers });
-    const $ = cheerio.load(rynn.data);
-    const cookie = rynn.headers['set-cookie']?.join('; ');
-    const token = $('meta[name="csrf-token"]').attr('content');
+const scrapers = {
+    async tiktok(url) {
+        const params = new URLSearchParams({ url, web: '1' });
+        const { data } = await axios.post('https://www.tikwm.com/api/', params, { headers: globalHeaders });
+        if (!data.data) throw new Error("TikTok content not found");
+        return { title: data.data.title, url: data.data.play };
+    },
 
-    const { data: dl } = await axios.post('https://spotmate.online/convert', { urls: url }, {
-        headers: { 
-            cookie, 
-            'x-csrf-token': token,
-            ...headers
-        }
-    });
-    return { title: "Spotify Track", url: dl.url };
-}
+    async spotify(url) {
+        const rynn = await axios.get('https://spotmate.online/', { headers: globalHeaders });
+        const $ = cheerio.load(rynn.data);
+        const cookie = rynn.headers['set-cookie']?.join('; ');
+        const token = $('meta[name="csrf-token"]').attr('content');
+        
+        const { data: dl } = await axios.post('https://spotmate.online/convert', { urls: url }, {
+            headers: { cookie, 'x-csrf-token': token, ...globalHeaders }
+        });
+        return { title: "Spotify Track", url: dl.url };
+    },
 
-/**
- * 3. YOUTUBE SCRAPER (Tmate/Y2Mate Logic)
- */
-async function youtubeScraper(url, format) {
-    const search = await axios.post('https://tmate.app/api/ajaxSearch', new URLSearchParams({ q: url, vt: 'home' }), { headers });
-    const vidId = search.data.vid;
-    
-    let k = "";
-    if (format === 'mp3') {
-        k = search.data.links.mp3.mp3128.k;
-    } else {
-        const mp4Links = search.data.links.mp4;
-        const q = mp4Links['720'] ? '720' : Object.keys(mp4Links)[0];
-        k = mp4Links[q].k;
+    async youtube(url, format) {
+        const params = new URLSearchParams({ q: url, vt: 'home' });
+        const search = await axios.post('https://tmate.app/api/ajaxSearch', params, { headers: globalHeaders });
+        const { vid, links, title } = search.data;
+        
+        const k = (format === 'mp3') 
+            ? links.mp3.mp3128.k 
+            : links.mp4[Object.keys(links.mp4)[0]].k;
+
+        const convertParams = new URLSearchParams({
+            type: 'youtube', _id: vid, v_id: vid, ajax: '1', 
+            ftype: format, fquality: format === 'mp3' ? '128' : '720', key: k
+        });
+
+        const convert = await axios.post('https://tmate.app/api/ajaxSearch/convert', convertParams, { headers: globalHeaders });
+        const $ = cheerio.load(convert.data.result);
+        return { title, url: $('a').attr('href') };
+    },
+
+    async universal(url) {
+        const params = new URLSearchParams({ url });
+        const { data } = await axios.post('https://worker.sf-helper.com/savefrom.php', params, { headers: globalHeaders });
+        if (!data?.url?.[0]?.url) throw new Error("Could not extract download link");
+        return { title: data.meta?.title || "Media Download", url: data.url[0].url };
     }
+};
 
-    const convert = await axios.post('https://tmate.app/api/ajaxSearch/convert', new URLSearchParams({
-        type: 'youtube', _id: vidId, v_id: vidId, ajax: '1', ftype: format, fquality: format === 'mp3' ? '128' : '720', key: k
-    }), { headers });
+// --- MAIN HANDLER (Serverless Function) ---
 
-    const dl_url = cheerio.load(convert.data.result)('a').attr('href');
-    return { title: search.data.title, url: dl_url };
-}
-
-/**
- * 4. UNIVERSAL SCRAPER (FB, IG, X, Threads, Pinterest, CapCut)
- * Menggunakan Jalur API Loovids/Savefrom
- */
-async function universalScraper(url) {
-    const { data } = await axios.post('https://worker.sf-helper.com/savefrom.php', new URLSearchParams({ url }), { headers });
-    if (!data || !data.url || data.url.length === 0) {
-        // Fallback ke Loovids jika Savefrom gagal
-        const loovids = await axios.post('https://loovids.com/api/ajaxSearch', new URLSearchParams({ q: url }), { headers });
-        const $ = cheerio.load(loovids.data.data);
-        const link = $('a.btn-download').attr('href');
-        if (!link) throw new Error("Media link not found");
-        return { title: "Social Media Media", url: link };
-    }
-    return { title: data.meta?.title || "Downloaded Media", url: data.url[0].url };
-}
-
-/**
- * MAIN ROUTER HANDLER
- */
 module.exports = async (req, res) => {
-    // CORS Headers
+    // CORS Modern
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-    
+
     const { url, format = 'mp4' } = req.query;
 
-    if (!url) return res.status(400).json({ success: false, message: "URL is required" });
+    if (!url) {
+        return res.status(400).json({ success: false, message: "URL is required" });
+    }
 
     try {
+        // Node 24 WHATWG URL Parsing
+        const targetUrl = new URL(url);
+        const host = targetUrl.hostname.replace('www.', '');
+
         let result;
-        const lowUrl = url.toLowerCase();
 
-        // Router Logika berdasarkan Hostname
-        if (lowUrl.includes('tiktok.com')) {
-            result = await tiktokScraper(url);
-        } 
-        else if (lowUrl.includes('googleusercontent.com/spotify.com') || lowUrl.includes('spotify.com')) {
-            result = await spotifyScraper(url);
-        } 
-        else if (lowUrl.includes('youtube.com') || lowUrl.includes('youtu.be')) {
-            result = await youtubeScraper(url, format);
-        } 
-        else {
-            // Menangani FB, IG, X, Pinterest, SnackVideo, CapCut secara otomatis
-            result = await universalScraper(url);
+        if (host.includes('tiktok.com')) {
+            result = await scrapers.tiktok(url);
+        } else if (host.includes('googleusercontent.com') || host.includes('spotify.com')) {
+            result = await scrapers.spotify(url);
+        } else if (host.includes('youtube.com') || host.includes('youtu.be')) {
+            result = await scrapers.youtube(url, format);
+        } else {
+            // Jalur untuk FB, IG, X, Pinterest, dll.
+            result = await scrapers.universal(url);
         }
-
-        if (!result.url) throw new Error("Scraper returned empty URL");
 
         res.status(200).json({
             success: true,
@@ -117,12 +93,12 @@ module.exports = async (req, res) => {
             download_url: result.url
         });
 
-    } catch (e) {
-        console.error("Scraper Error:", e.message);
+    } catch (error) {
+        console.error(`[Error ${new Date().toISOString()}]:`, error.message);
         res.status(500).json({ 
             success: false, 
-            message: "Gagal mengambil video. Link mungkin private atau tidak didukung.",
-            error: e.message 
+            message: "Scraper failed or platform not supported.",
+            details: error.message 
         });
     }
 };
