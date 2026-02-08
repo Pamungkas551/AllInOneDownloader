@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MultiDL - Downloader</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Fast<span class="logo-accent">DL</span></h1>
+            <p>Download video YT, TikTok, IG, FB, & SnackVideo</p>
+        </header>
+
+        <div class="card">
+            <input type="text" id="urlInput" placeholder="Tempel link video di sini...">
+            
+            <div class="format-group">
+                <label class="radio-card">
+                    <input type="radio" name="format" value="mp4" checked>
+                    <span>📹 MP4 (Video)</span>
+                </label>
+                <label class="radio-card">
+                    <input type="radio" name="format" value="mp3">
+                    <span>🎵 MP3 (Audio)</span>
+                </label>
+            </div>
+
+            <button id="dlBtn" onclick="handleDownload()">Ambil Video</button>
+            <div id="loader" class="loader"></div>
+        </div>
+
+        <div id="result" class="result-card">
+            <h3 id="resTitle"></h3>
+            <a id="resLink" href="#" target="_blank">
+                <button class="btn-success">Download Sekarang</button>
+            </a>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
