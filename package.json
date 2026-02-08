@@ -1,12 +1,32 @@
 {
-  "name": "fastdl-downloader",
-  "version": "1.0.0",
-  "description": "Multi Video Downloader All-in-One",
+  "name": "ultimate-all-downloader",
+  "version": "1.1.0",
+  "description": "Multi-platform media scraper for YouTube, Spotify, TikTok, IG, FB, and more.",
   "main": "api/download.js",
   "dependencies": {
-    "axios": "^1.6.0"
+    "axios": "^1.6.0",
+    "cheerio": "^1.0.0-rc.12"
   },
   "engines": {
     "node": "24.x"
-  }
+  },
+  "keywords": [
+    "downloader",
+    "video-downloader",
+    "music-downloader",
+    "scraper",
+    "tiktok-no-watermark",
+    "youtube-mp3",
+    "spotify-downloader",
+    "instagram-reels",
+    "facebook-video",
+    "twitter-x-video",
+    "threads-media",
+    "snackvideo-scraper",
+    "pinterest-video",
+    "capcut-downloader",
+    "soundcloud-mp3"
+  ],
+  "author": "kyy",
+  "license": "MIT"
 }
